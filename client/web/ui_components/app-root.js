@@ -65,6 +65,8 @@ import '../views/root_view/root_navigation';
 // eslint-disable-next-line n/no-missing-import
 import '../views/appearance_view';
 // eslint-disable-next-line n/no-missing-import
+import '../views/split_tunneling_view';
+// eslint-disable-next-line n/no-missing-import
 import * as i18n from '@outline/infrastructure/i18n';
 import {AppLocalizeBehavior} from '@polymer/app-localize-behavior/app-localize-behavior.js';
 import {PaperMenuButton} from '@polymer/paper-menu-button/paper-menu-button.js';
@@ -363,6 +365,10 @@ export class AppRoot extends mixinBehaviors(
             selected-appearance="[[selectedAppearance]]"
             localize="[[localize]]"
           ></appearance-view>
+          <split-tunneling-view
+            name="split-tunneling"
+            language="[[language]]"
+          ></split-tunneling-view>
         </iron-pages>
       </app-header-layout>
 
@@ -372,6 +378,8 @@ export class AppRoot extends mixinBehaviors(
         show-quit="[[shouldShowQuitButton]]"
         data-collection-page-url="https://getoutline.org/policies/data-collection"
         show-appearance-view="[[showAppearanceView]]"
+        show-split-tunneling-view="[[showSplitTunnelingView]]"
+        language="[[language]]"
       ></root-navigation>
 
       <add-access-key-dialog
@@ -594,6 +602,10 @@ export class AppRoot extends mixinBehaviors(
         type: Boolean,
         value: false,
       },
+      showSplitTunnelingView: {
+        type: Boolean,
+        value: false,
+      },
       selectedAppearance: {
         type: String,
       },
@@ -655,6 +667,7 @@ export class AppRoot extends mixinBehaviors(
       // Don't use cordova?.platformId, ReferenceError will be thrown
       this.platform = globalThis.cordova.platformId;
     }
+    this.showSplitTunnelingView = this.platform === 'android';
   }
 
   setLanguage(languageCode) {

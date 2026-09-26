@@ -22,13 +22,17 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.net.VpnService;
 import android.os.IBinder;
 import android.os.RemoteException;
 import androidx.annotation.Nullable;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.cordova.CallbackContext;
@@ -40,6 +44,7 @@ import org.json.JSONObject;
 import org.outline.log.OutlineLogger;
 import org.outline.log.SentryErrorReporter;
 import org.outline.vpn.Errors;
+import org.outline.vpn.SplitTunnelingPreferences;
 import org.outline.vpn.VpnServiceStarter;
 import org.outline.vpn.VpnTunnelService;
 
@@ -64,6 +69,8 @@ public class OutlinePlugin extends CordovaPlugin {
     IS_RUNNING("isRunning"),
     INIT_ERROR_REPORTING("initializeErrorReporting"),
     REPORT_EVENTS("reportEvents"),
+    GET_SPLIT_TUNNELING("getSplitTunneling"),
+    SET_SPLIT_TUNNELING("setSplitTunneling"),
     QUIT("quitApplication");
 
     private final static Map<String, Action> actions = new HashMap<>();
@@ -224,6 +231,43 @@ public class OutlinePlugin extends CordovaPlugin {
           final String tunnelId = args.getString(0);
           boolean isActive = isTunnelActive(tunnelId);
           callback.sendPluginResult(new PluginResult(PluginResult.Status.OK, isActive));
+
+        } else if (Action.GET_SPLIT_TUNNELING.is(action)) {
+          Context context = getBaseContext();
+          PackageManager packageManager = context.getPackageManager();
+          JSONArray applications = new JSONArray();
+          for (ApplicationInfo info : packageManager.getInstalledApplications(0)) {
+            if (info.packageName.equals(context.getPackageName())) {
+              continue;
+            }
+            JSONObject application = new JSONObject();
+            application.put("packageName", info.packageName);
+            application.put("label", packageManager.getApplicationLabel(info).toString());
+            application.put("system", (info.flags & ApplicationInfo.FLAG_SYSTEM) != 0);
+            applications.put(application);
+          }
+          JSONObject policy = new JSONObject();
+          policy.put("mode", SplitTunnelingPreferences.getMode(context));
+          policy.put("packages", new JSONArray(SplitTunnelingPreferences.getPackages(context)));
+          policy.put("applications", applications);
+          callback.success(policy);
+        } else if (Action.SET_SPLIT_TUNNELING.is(action)) {
+          Context context = getBaseContext();
+          String mode = args.getString(0);
+          JSONArray selected = args.getJSONArray(1);
+          Set<String> packages = new HashSet<>();
+          for (int i = 0; i < selected.length(); i++) {
+            packages.add(selected.getString(i));
+          }
+          SplitTunnelingPreferences.save(context, mode, packages);
+          Intent apply = new Intent(context, VpnTunnelService.class);
+          apply.putExtra(VpnTunnelService.APPLY_SPLIT_TUNNELING_EXTRA, true);
+          apply.putExtra(VpnTunnelService.SPLIT_TUNNELING_MODE_EXTRA, mode);
+          apply.putStringArrayListExtra(
+              VpnTunnelService.SPLIT_TUNNELING_PACKAGES_EXTRA,
+              new java.util.ArrayList<>(packages));
+          context.startService(apply);
+          callback.success();
 
           // Static actions
         } else if (Action.INIT_ERROR_REPORTING.is(action)) {

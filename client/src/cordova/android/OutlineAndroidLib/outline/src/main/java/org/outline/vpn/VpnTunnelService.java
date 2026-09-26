@@ -39,6 +39,7 @@ import androidx.annotation.Nullable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -73,6 +74,9 @@ public class VpnTunnelService extends VpnService {
   public static final String STATUS_BROADCAST_KEY = "onStatusChange";
   public static final String START_LAST_TUNNEL_EXTRA = "startLastTunnel";
   public static final String STOP_ACTIVE_TUNNEL_EXTRA = "stopActiveTunnel";
+  public static final String APPLY_SPLIT_TUNNELING_EXTRA = "applySplitTunneling";
+  public static final String SPLIT_TUNNELING_MODE_EXTRA = "splitTunnelingMode";
+  public static final String SPLIT_TUNNELING_PACKAGES_EXTRA = "splitTunnelingPackages";
 
   public enum TunnelStatus {
     INVALID(-1), // Internal use only.
@@ -107,6 +111,8 @@ public class VpnTunnelService extends VpnService {
   private NetworkConnectivityMonitor networkConnectivityMonitor;
   private VpnTunnelStore tunnelStore;
   private Notification.Builder notificationBuilder;
+  private String splitTunnelingMode;
+  private Set<String> splitTunnelingPackages;
 
   private final IVpnTunnelService.Stub binder = new IVpnTunnelService.Stub() {
     @Override
@@ -135,6 +141,8 @@ public class VpnTunnelService extends VpnService {
     LOG.info("Creating VPN service.");
     networkConnectivityMonitor = new NetworkConnectivityMonitor();
     tunnelStore = new VpnTunnelStore(VpnTunnelService.this);
+    splitTunnelingMode = SplitTunnelingPreferences.getMode(this);
+    splitTunnelingPackages = SplitTunnelingPreferences.getPackages(this);
   }
 
   @Override
@@ -161,6 +169,17 @@ public class VpnTunnelService extends VpnService {
     LOG.info(String.format(Locale.ROOT, "Starting VPN service: %s", intent));
     int superOnStartReturnValue = super.onStartCommand(intent, flags, startId);
     if (intent != null) {
+      if (intent.getBooleanExtra(APPLY_SPLIT_TUNNELING_EXTRA, false)) {
+        splitTunnelingMode = intent.getStringExtra(SPLIT_TUNNELING_MODE_EXTRA);
+        splitTunnelingPackages = new java.util.HashSet<>(
+            intent.getStringArrayListExtra(SPLIT_TUNNELING_PACKAGES_EXTRA));
+        if (this.tunnelConfig != null && this.tunFd != null) {
+          broadcastVpnConnectivityChange(TunnelStatus.DISCONNECTED);
+          tearDownActiveTunnel();
+          startLastSuccessfulTunnel();
+        }
+        return superOnStartReturnValue;
+      }
       if (intent.getBooleanExtra(STOP_ACTIVE_TUNNEL_EXTRA, false)) {
         broadcastVpnConnectivityChange(TunnelStatus.DISCONNECTED);
         tearDownActiveTunnel();
@@ -262,8 +281,10 @@ public class VpnTunnelService extends VpnService {
                         // TODO(fortuna): dynamically select it.
                         .addAddress("10.111.222.1", 24)
                         .addDnsServer(dnsResolver)
-                        .setBlocking(true)
-                        .addDisallowedApplication(this.getPackageName());
+                        .setBlocking(true);
+
+        SplitTunnelingPreferences.apply(
+            this, builder, splitTunnelingMode, splitTunnelingPackages);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
           builder.setMetered(false);
