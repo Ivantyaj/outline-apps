@@ -19,8 +19,8 @@ import (
 	"errors"
 	"net"
 
-	"localhost/client/go/configyaml"
 	"golang.getoutline.org/sdk/transport"
+	"localhost/client/go/configyaml"
 )
 
 // newTypeParser is a wrapper around [configyaml.NewTypeParser] that allows us to centralize the registration
@@ -130,6 +130,7 @@ func NewDefaultTransportProvider(directSD transport.StreamDialer, directPD trans
 	// Transport pairs.
 	transports.RegisterSubParser("tcpudp", NewTCPUDPTransportPairSubParser(streamDialers.Parse, packetListeners.Parse))
 	transports.RegisterSubParser("basic-access", NewProxylessTransportPairSubParser(streamDialers.Parse))
+	transports.RegisterSubParser("singbox", NewSingboxTransportPairSubParser())
 
 	return transports
 }

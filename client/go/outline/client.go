@@ -23,13 +23,13 @@ import (
 	"path"
 	"runtime"
 
+	"github.com/goccy/go-yaml"
+	"golang.getoutline.org/sdk/network/packetrelay"
+	"golang.getoutline.org/sdk/transport"
 	"localhost/client/go/configyaml"
 	"localhost/client/go/outline/configregistry"
 	"localhost/client/go/outline/platerrors"
 	"localhost/client/go/outline/reporting"
-	"golang.getoutline.org/sdk/network/packetrelay"
-	"golang.getoutline.org/sdk/transport"
-	"github.com/goccy/go-yaml"
 )
 
 // Client provides a transparent container for [transport.StreamDialer] and [transport.PacketListener]
@@ -41,10 +41,12 @@ import (
 //     to handle that.
 //   - Refactor so that StartSession returns a Client
 type Client struct {
-	sd            *configregistry.Dialer[transport.StreamConn]
-	pr            *configregistry.PacketRelay
-	reporter      reporting.Reporter
-	sessionCancel context.CancelFunc
+	sd             *configregistry.Dialer[transport.StreamConn]
+	pr             *configregistry.PacketRelay
+	startTransport func() error
+	closeTransport func() error
+	reporter       reporting.Reporter
+	sessionCancel  context.CancelFunc
 }
 
 // DialStream implements StreamDialer.DialStream.
@@ -65,6 +67,11 @@ func (c *Client) NotifyNetworkChanged() {
 
 func (c *Client) StartSession() error {
 	slog.Debug("Starting session")
+	if c.startTransport != nil {
+		if err := c.startTransport(); err != nil {
+			return err
+		}
+	}
 	var sessionCtx context.Context
 	sessionCtx, c.sessionCancel = context.WithCancel(context.Background())
 	c.NotifyNetworkChanged()
@@ -77,6 +84,9 @@ func (c *Client) StartSession() error {
 func (c *Client) EndSession() error {
 	slog.Debug("Ending session")
 	c.sessionCancel()
+	if c.closeTransport != nil {
+		return c.closeTransport()
+	}
 	return nil
 }
 
@@ -155,7 +165,10 @@ func (c *ClientConfig) new(keyID string, providerClientConfigText string) (*Clie
 		}
 	}
 
-	client := &Client{sd: transportPair.StreamDialer, pr: transportPair.PacketRelay}
+	client := &Client{
+		sd: transportPair.StreamDialer, pr: transportPair.PacketRelay,
+		startTransport: transportPair.Start, closeTransport: transportPair.Close,
+	}
 
 	// TODO: figure out a better way to handle parse calls.
 	if providerClientConfig.Reporter != nil {

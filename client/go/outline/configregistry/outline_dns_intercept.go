@@ -98,7 +98,7 @@ func wrapTransportPairWithOutlineDNS(sd *Dialer[transport.StreamConn], pl *Packe
 	}
 
 	return &TransportPair{
-		&Dialer[transport.StreamConn]{sd.ConnectionProviderInfo, sdForward},
-		&PacketRelay{pl.ConnectionProviderInfo, relayMain, onNetworkChanged},
+		StreamDialer: &Dialer[transport.StreamConn]{sd.ConnectionProviderInfo, sdForward},
+		PacketRelay:  &PacketRelay{pl.ConnectionProviderInfo, relayMain, onNetworkChanged},
 	}, nil
 }

@@ -103,6 +103,8 @@ type Endpoint[ConnType any] struct {
 type TransportPair struct {
 	StreamDialer *Dialer[transport.StreamConn]
 	PacketRelay  *PacketRelay
+	Start        func() error
+	Close        func() error
 }
 
 var _ transport.StreamDialer = (*TransportPair)(nil)
