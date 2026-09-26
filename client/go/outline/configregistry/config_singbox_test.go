@@ -83,6 +83,35 @@ config: |
 	}
 }
 
+func TestSingboxDNSFallsBackToTCP(t *testing.T) {
+	config, err := configyaml.ParseConfigYAML(`$type: singbox
+config: |
+  {"outbounds":[{"type":"direct","tag":"direct"}],"route":{"final":"direct"}}`)
+	require.NoError(t, err)
+	pair, err := newTestTransportProvider().Parse(context.Background(), config)
+	require.NoError(t, err)
+	require.NoError(t, pair.Start())
+	defer pair.Close()
+	sender, receiver, err := pair.PacketRelay.NewAssociation()
+	require.NoError(t, err)
+	defer sender.Close()
+	response := capturePacket{packets: make(chan []byte, 1)}
+	go func() { _ = receiver.ReceivePackets(response) }()
+	query := []byte{
+		0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0,
+		7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 0, 0, 1, 0, 1,
+	}
+	require.NoError(t, sender.SendPacket(query, singboxDNS))
+	select {
+	case packet := <-response.packets:
+		require.Equal(t, query[:2], packet[:2])
+		require.NotZero(t, packet[2]&0x80, "DNS response bit")
+		require.NotZero(t, packet[2]&0x02, "DNS truncated bit")
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for truncated DNS response")
+	}
+}
+
 func TestSingboxRejectsUnsupportedRouting(t *testing.T) {
 	config, err := configyaml.ParseConfigYAML(`$type: singbox
 config: |
@@ -91,3 +120,4 @@ config: |
 	_, err = newTestTransportProvider().Parse(context.Background(), config)
 	require.ErrorContains(t, err, "unsupported sing-box route option: rules")
 }
+
