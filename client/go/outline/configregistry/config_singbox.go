@@ -11,6 +11,8 @@ import (
 	"net/netip"
 	"sync"
 
+	"golang.getoutline.org/sdk/network/dnsintercept"
+	"golang.getoutline.org/sdk/network/dnstruncate"
 	"golang.getoutline.org/sdk/network/packetrelay"
 	"golang.getoutline.org/sdk/transport"
 	"localhost/client/go/configyaml"
@@ -94,9 +96,17 @@ func NewSingboxTransportPairSubParser() func(context.Context, map[string]any) (*
 			ConnectionProviderInfo: ConnectionProviderInfo{connectionType, firstHop},
 			Dial:                   runtime.dialStream,
 		}
+		// Some VLESS servers cannot carry UDP. Let Android retry DNS over TCP,
+		// which uses the same outbound as the TCP connectivity check.
+		dnsTruncRelay, err := dnstruncate.NewPacketRelay()
+		if err != nil {
+			return nil, fmt.Errorf("create sing-box DNS relay: %w", err)
+		}
+		udpRelay := dnsintercept.NewInterceptDNSPacketRelay(
+			dnsTruncRelay, &singboxPacketRelay{runtime: runtime}, singboxDNS, singboxRemoteDNS)
 		relay := &PacketRelay{
 			ConnectionProviderInfo: ConnectionProviderInfo{connectionType, firstHop},
-			PacketRelay:            &singboxPacketRelay{runtime: runtime},
+			PacketRelay:            udpRelay,
 			NotifyNetworkChanged:   func() {},
 		}
 		return &TransportPair{StreamDialer: stream, PacketRelay: relay,
@@ -352,3 +362,4 @@ func (a *singboxAssociation) Close() error {
 	})
 	return nil
 }
+
