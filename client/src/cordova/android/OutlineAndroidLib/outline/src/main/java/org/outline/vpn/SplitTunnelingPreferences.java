@@ -48,6 +48,21 @@ public final class SplitTunnelingPreferences {
     if (packages.contains(context.getPackageName())) {
       throw new IllegalArgumentException("The VPN app cannot be selected");
     }
+    if (MODE_ONLY.equals(mode)) {
+      boolean anyInstalled = false;
+      for (String packageName : packages) {
+        try {
+          context.getPackageManager().getApplicationInfo(packageName, 0);
+          anyInstalled = true;
+          break;
+        } catch (PackageManager.NameNotFoundException ignored) {
+          // Keep looking for an installed application.
+        }
+      }
+      if (!anyInstalled) {
+        throw new IllegalArgumentException("Select an installed application");
+      }
+    }
     if (!preferences(context).edit()
         .putString(MODE_KEY, mode)
         .putStringSet(PACKAGES_KEY, new HashSet<>(packages))
@@ -65,11 +80,10 @@ public final class SplitTunnelingPreferences {
       }
       if (!anyInstalled) {
         // An empty allowed list would route every app through the VPN on Android.
-        // Include only the VPN app until a selected app is installed again.
-        addApplication(builder, context.getPackageName(), true);
+        throw new IllegalStateException("No selected VPN application is installed");
       }
     } else {
-      // The VPN process must use its protected sockets outside the tunnel.
+      // The Outline process needs a direct route to the server.
       addApplication(builder, context.getPackageName(), false);
       if (MODE_BYPASS.equals(mode)) {
         for (String packageName : packages) {

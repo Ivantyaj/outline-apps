@@ -166,7 +166,11 @@ export class SplitTunnelingView extends LitElement {
   }
 
   private async save() {
-    if (this.mode === 'only' && this.selected.size === 0) return;
+    if (
+      this.mode === 'only' &&
+      !this.applications.some(app => this.selected.has(app.packageName))
+    )
+      return;
     this.saving = true;
     this.error = '';
     try {
@@ -182,6 +186,9 @@ export class SplitTunnelingView extends LitElement {
   }
 
   render() {
+    const hasInstalledSelection = this.applications.some(app =>
+      this.selected.has(app.packageName)
+    );
     const query = this.search.trim().toLocaleLowerCase();
     const visible = this.applications.filter(
       app =>
@@ -282,18 +289,18 @@ export class SplitTunnelingView extends LitElement {
         <button
           ?disabled=${this.loading ||
           this.saving ||
-          (this.mode === 'only' && this.selected.size === 0)}
+          (this.mode === 'only' && !hasInstalledSelection)}
           @click=${this.save}
         >
           ${this.saving
             ? this.label('Saving…', 'Сохранение…')
             : this.label('Save', 'Сохранить')}
         </button>
-        ${this.mode === 'only' && this.selected.size === 0
+        ${this.mode === 'only' && !hasInstalledSelection
           ? html`<p class="notice">
               ${this.label(
-                'Select at least one app.',
-                'Выберите хотя бы одно приложение.'
+                'Select at least one installed app.',
+                'Выберите хотя бы одно установленное приложение.'
               )}
             </p>`
           : ''}
